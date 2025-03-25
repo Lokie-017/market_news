@@ -4,5 +4,5 @@ plotly
 TextBlob
 requests
 pandas
-Nse
+nsetools
 lxml
