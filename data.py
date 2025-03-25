@@ -1,3 +1,4 @@
+from nsetools import Nse
 import streamlit as st
 import requests
 import pandas as pd
@@ -6,6 +7,8 @@ import time
 
 st.set_page_config(page_title="Indian Stock Explosion Predictor", layout="wide")
 st.title("🚀 Indian Stock Explosion Predictor")
+
+nse = Nse()
 
 @st.cache_data(ttl=30)  # Cache data for 30 seconds to avoid excessive API calls
 def fetch_nse_data(ticker):
@@ -34,12 +37,12 @@ def calculate_stop_loss(price, change):
     stop_loss_factor = 0.95 if change > 8 else 0.90
     return round(price * stop_loss_factor, 2)
 
-# Fetch all NSE stocks
+# Fetch all NSE stock symbols
 def get_all_nse_stocks():
-    nse_tickers = pd.read_html("https://www.nseindia.com/market-data/live-equity-market")[0]
-    return nse_tickers["SYMBOL"].tolist()
+    stock_codes = nse.get_stock_codes()
+    return [symbol + ".NS" for symbol in stock_codes if symbol != "SYMBOL"]
 
-nse_stocks = [ticker + ".NS" for ticker in get_all_nse_stocks()]
+nse_stocks = get_all_nse_stocks()
 
 # Function to analyze multiple stocks
 def analyze_market():
