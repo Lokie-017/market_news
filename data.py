@@ -7,13 +7,13 @@ import time
 st.set_page_config(page_title="Indian Stock Explosion Predictor", layout="wide")
 st.title("🚀 Indian Stock Explosion Predictor")
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=300)  # Cache data for 5 minutes to reduce API calls
 def fetch_nse_data(ticker):
     stock = yf.Ticker(ticker)
     hist = stock.history(period="1mo")
+    time.sleep(1)  # Pause to avoid rate limiting
     return hist
 
-# Fetch all NSE stocks dynamically
 @st.cache_data(ttl=86400)  # Cache for 24 hours
 def get_all_nse_stocks():
     url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
@@ -22,10 +22,9 @@ def get_all_nse_stocks():
 
 nse_stocks = [ticker + ".NS" for ticker in get_all_nse_stocks()]
 
-# Fetch and analyze stock data
 def analyze_market():
     results = []
-    for ticker in nse_stocks:
+    for ticker in nse_stocks[:50]:  # Limit requests to avoid rate limiting
         stock_data = fetch_nse_data(ticker)
         
         if stock_data.empty:
