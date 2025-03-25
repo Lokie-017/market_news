@@ -34,44 +34,46 @@ def calculate_stop_loss(price, change):
     stop_loss_factor = 0.95 if change > 8 else 0.90
     return round(price * stop_loss_factor, 2)
 
-# Function to analyze market and detect potential breakouts
-def analyze_market(ticker):
-    stock_data = fetch_nse_data(ticker)
-    
-    if stock_data.empty:
-        return []
-    
-    latest_close = stock_data["Close"].iloc[-1]
-    volume = stock_data["Volume"].iloc[-1]
-    change = ((latest_close - stock_data["Close"].iloc[-2]) / stock_data["Close"].iloc[-2]) * 100
-    
-    if change > 5 and volume > 500000:
-        target_price = calculate_target_price(latest_close, change, volume)
-        stop_loss_price = calculate_stop_loss(latest_close, change)
-        trade_decision = "✅ Strong Buy" if change > 8 else "⚠ Moderate Buy"
-        reasons = get_news(ticker)
-        
-        return [{
-            "Stock": ticker, "Current Price": latest_close, "24h Change (%)": round(change, 2),
-            "Volume": volume, "Target Price": target_price,
-            "Stop Loss Price": stop_loss_price, "Trade Decision": trade_decision,
-            "Reasons for Movement": reasons
-        }]
-    return []
+# Fetch all NSE stocks
+def get_all_nse_stocks():
+    nse_tickers = pd.read_html("https://www.nseindia.com/market-data/live-equity-market")[0]
+    return nse_tickers["SYMBOL"].tolist()
 
-# Sidebar - Stock Selection
-st.sidebar.header("Select an Indian Stock")
-selected_stock = st.sidebar.text_input("Enter NSE Stock Ticker (e.g., RELIANCE.NS, TCS.NS):", "RELIANCE.NS")
+nse_stocks = [ticker + ".NS" for ticker in get_all_nse_stocks()]
+
+# Function to analyze multiple stocks
+def analyze_market():
+    results = []
+    for ticker in nse_stocks:
+        stock_data = fetch_nse_data(ticker)
+        
+        if stock_data.empty:
+            continue
+        
+        latest_close = stock_data["Close"].iloc[-1]
+        volume = stock_data["Volume"].iloc[-1]
+        change = ((latest_close - stock_data["Close"].iloc[-2]) / stock_data["Close"].iloc[-2]) * 100
+        
+        if change > 5 and volume > 500000:
+            target_price = calculate_target_price(latest_close, change, volume)
+            stop_loss_price = calculate_stop_loss(latest_close, change)
+            trade_decision = "✅ Strong Buy" if change > 8 else "⚠ Moderate Buy"
+            reasons = get_news(ticker)
+            
+            results.append({
+                "Stock": ticker, "Current Price": latest_close, "24h Change (%)": round(change, 2),
+                "Volume": volume, "Target Price": target_price,
+                "Stop Loss Price": stop_loss_price, "Trade Decision": trade_decision,
+                "Reasons for Movement": ", ".join(reasons)
+            })
+    return results
 
 # Fetch and analyze market data
-data = analyze_market(selected_stock)
+data = analyze_market()
 if data:
     df = pd.DataFrame(data)
     st.subheader("📈 Stocks Likely to Explode Soon")
     st.dataframe(df)
-    st.subheader("📢 Reasons for Price Movement")
-    for reason in data[0]["Reasons for Movement"]:
-        st.write(f"- {reason}")
 else:
     st.info("No potential explosive stocks detected right now.")
 
