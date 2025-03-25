@@ -1,4 +1,3 @@
-from nsetools import Nse
 import streamlit as st
 import requests
 import pandas as pd
@@ -8,43 +7,22 @@ import time
 st.set_page_config(page_title="Indian Stock Explosion Predictor", layout="wide")
 st.title("🚀 Indian Stock Explosion Predictor")
 
-nse = Nse()
-
-@st.cache_data(ttl=30)  # Cache data for 30 seconds to avoid excessive API calls
+@st.cache_data(ttl=30)
 def fetch_nse_data(ticker):
     stock = yf.Ticker(ticker)
     hist = stock.history(period="1mo")
     return hist
 
-# Function to fetch market news
-def get_news(ticker):
-    api_url = f"https://newsapi.org/v2/everything?q={ticker}&language=en&apiKey=0ba785010ef34b33b31eb4def71e51b4"
-    response = requests.get(api_url)
-    news_data = response.json()
-    
-    articles = news_data.get("articles", [])
-    headlines = [article["title"] for article in articles[:5]]
-    return headlines
-
-# Function to calculate target price
-def calculate_target_price(price, change, volume):
-    fib_multiplier = 1.618
-    volatility_factor = 1 + (volume / 10000000)
-    return round(price * (1 + ((change / 100) * fib_multiplier * volatility_factor)), 2)
-
-# Function to calculate stop-loss
-def calculate_stop_loss(price, change):
-    stop_loss_factor = 0.95 if change > 8 else 0.90
-    return round(price * stop_loss_factor, 2)
-
-# Fetch all NSE stock symbols
+# Fetch all NSE stocks dynamically
+@st.cache_data(ttl=86400)  # Cache for 24 hours
 def get_all_nse_stocks():
-    stock_codes = nse.get_stock_codes()
-    return [symbol + ".NS" for symbol in stock_codes if symbol != "SYMBOL"]
+    url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
+    df = pd.read_csv(url)
+    return df["SYMBOL"].tolist()
 
-nse_stocks = get_all_nse_stocks()
+nse_stocks = [ticker + ".NS" for ticker in get_all_nse_stocks()]
 
-# Function to analyze multiple stocks
+# Fetch and analyze stock data
 def analyze_market():
     results = []
     for ticker in nse_stocks:
@@ -58,20 +36,12 @@ def analyze_market():
         change = ((latest_close - stock_data["Close"].iloc[-2]) / stock_data["Close"].iloc[-2]) * 100
         
         if change > 5 and volume > 500000:
-            target_price = calculate_target_price(latest_close, change, volume)
-            stop_loss_price = calculate_stop_loss(latest_close, change)
-            trade_decision = "✅ Strong Buy" if change > 8 else "⚠ Moderate Buy"
-            reasons = get_news(ticker)
-            
             results.append({
                 "Stock": ticker, "Current Price": latest_close, "24h Change (%)": round(change, 2),
-                "Volume": volume, "Target Price": target_price,
-                "Stop Loss Price": stop_loss_price, "Trade Decision": trade_decision,
-                "Reasons for Movement": ", ".join(reasons)
+                "Volume": volume
             })
     return results
 
-# Fetch and analyze market data
 data = analyze_market()
 if data:
     df = pd.DataFrame(data)
@@ -80,6 +50,5 @@ if data:
 else:
     st.info("No potential explosive stocks detected right now.")
 
-# Auto-refresh every 30 seconds
 time.sleep(30)
 st.rerun()
