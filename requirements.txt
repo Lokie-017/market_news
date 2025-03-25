@@ -1,3 +1,6 @@
 yfinance
 streamlit
 plotly
+TextBlob
+requests
+pandas
