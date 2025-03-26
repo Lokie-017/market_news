@@ -66,13 +66,14 @@ if data:
     
     if not df.empty:
         st.subheader("📈 Cryptos Likely to Explode Soon")
-        st.dataframe(df)
 
-        # Handle Position Tracking
-        st.subheader("📌 Select Positions")
+        # Add checkbox column dynamically
+        positions = []
         for symbol in df["Symbol"]:
             position_taken = st.checkbox(f"📌 {symbol}", st.session_state.positions.get(symbol, False), key=symbol)
+            positions.append(position_taken)
 
+            # If position is taken & not already stored, add it to positionsON
             if position_taken and not st.session_state.positions.get(symbol, False):
                 coin_data = df[df["Symbol"] == symbol].iloc[0]
                 new_entry = pd.DataFrame([{
@@ -86,8 +87,14 @@ if data:
                     "Suggestion": "Hold"
                 }])
                 st.session_state.positionsON = pd.concat([st.session_state.positionsON, new_entry], ignore_index=True)
-            
+
             st.session_state.positions[symbol] = position_taken
+
+        # Add positions column
+        df["Took Position"] = positions
+
+        # Show updated DataFrame
+        st.dataframe(df)
 
         # Display Active Positions
         st.subheader("📊 Positions Tracking")
