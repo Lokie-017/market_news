@@ -14,9 +14,9 @@ def fetch_coindcx_data():
 
     if response.status_code == 200:
         data = response.json()
-        return [coin for coin in data if coin['market'].endswith('INR')]  # Filter INR pairs
+        return {coin['market']: coin for coin in data if coin['market'].endswith('INR')}  # Convert to dict for easy lookup
     else:
-        return []
+        return {}
 
 def calculate_target_price(price, change, volume):
     fib_multiplier = 1.618
@@ -27,16 +27,10 @@ def calculate_stop_loss(price, change):
     stop_loss_factor = 0.95 if change > 8 else 0.90
     return round(price * stop_loss_factor, 2)
 
-def calculate_volatility(change, volume):
-    # Volatility percentage calculation (Relative Change * Volume Impact)
-    volatility = abs(change) * (1 + (volume / 10000000))  
-    return round(volatility, 2)
-
 def analyze_market(data):
     potential_explosions = []
-    for coin in data:
+    for symbol, coin in data.items():
         try:
-            symbol = coin.get('market', 'N/A')
             price = float(coin.get('last_price', 0))
             volume = float(coin.get('volume', 0))
             change = float(coin.get('change_24_hour', 0))
@@ -44,25 +38,18 @@ def analyze_market(data):
             if change > 5 and volume > 500000:
                 target_price = calculate_target_price(price, change, volume)
                 stop_loss_price = calculate_stop_loss(price, change)
-                volatility = calculate_volatility(change, volume)
 
-                # Decision-making using volatility
-                if volatility > 20:
-                    trade_decision = "🔥 High Volatility - Enter with Caution"
-                elif volatility > 10:
-                    trade_decision = "✅ Strong Buy"
-                else:
-                    trade_decision = "⚠ Moderate Buy"
+                trade_decision = "✅ Strong Buy" if change > 10 else "⚠ Moderate Buy"
 
                 potential_explosions.append({
                     "Symbol": symbol, "Price": price, "24h Change (%)": change,
-                    "Volume": volume, "Volatility (%)": volatility,
-                    "Target Price": target_price, "Stop Loss Price": stop_loss_price, 
+                    "Volume": volume, "Target Price": target_price, "Stop Loss Price": stop_loss_price, 
                     "Trade Decision": trade_decision
                 })
         except ValueError:
             continue
-    return potential_explosions
+
+    return pd.DataFrame(potential_explosions) if potential_explosions else pd.DataFrame()
 
 # Fetch data
 data = fetch_coindcx_data()
@@ -72,50 +59,65 @@ if "positions" not in st.session_state:
     st.session_state.positions = {}
 
 if "positionsON" not in st.session_state:
-    st.session_state.positionsON = pd.DataFrame(columns=["Symbol", "Entry Time", "Exit Time", "Target Price", "Stop Loss Price"])
+    st.session_state.positionsON = pd.DataFrame(columns=["Symbol", "Entry Time", "Price", "Volume", "Target Price", "Stop Loss Price", "Status", "Suggestion"])
 
 if data:
-    analyzed_data = analyze_market(data)
+    df = analyze_market(data)
     
-    if analyzed_data:
-        df = pd.DataFrame(analyzed_data)
-
-        # Add checkbox column for tracking positions
+    if not df.empty:
         st.subheader("📈 Cryptos Likely to Explode Soon")
         
         for index, row in df.iterrows():
-            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 2, 2, 1])
+            col1, col2, col3, col4, col5, col6, col7 = st.columns([2, 2, 2, 2, 2, 2, 1])
             col1.write(row["Symbol"])
             col2.write(f"₹{row['Price']}")
-            col3.write(f"🎯 ₹{row['Target Price']}")
-            col4.write(f"🛑 ₹{row['Stop Loss Price']}")
-            col5.write(row["Trade Decision"])
+            col3.write(f"🔊 {row['Volume']}")
+            col4.write(f"🎯 ₹{row['Target Price']}")
+            col5.write(f"🛑 ₹{row['Stop Loss Price']}")
+            col6.write(row["Trade Decision"])
             
-            # Position checkbox
-            position_taken = col6.checkbox("📌 Took Position", st.session_state.positions.get(row["Symbol"], False), key=row["Symbol"])
+            position_taken = col7.checkbox("📌 Took Position", st.session_state.positions.get(row["Symbol"], False), key=row["Symbol"])
             
-            # Track entry and exit
             if position_taken and not st.session_state.positions.get(row["Symbol"], False):
                 new_entry = pd.DataFrame([{
                     "Symbol": row["Symbol"], 
                     "Entry Time": datetime.now(), 
-                    "Exit Time": None,
+                    "Price": row["Price"],
+                    "Volume": row["Volume"],
                     "Target Price": row["Target Price"],
-                    "Stop Loss Price": row["Stop Loss Price"]
+                    "Stop Loss Price": row["Stop Loss Price"],
+                    "Status": "Holding",
+                    "Suggestion": "Hold"
                 }])
                 st.session_state.positionsON = pd.concat([st.session_state.positionsON, new_entry], ignore_index=True)
-            
-            elif not position_taken and st.session_state.positions.get(row["Symbol"], False):
-                st.session_state.positionsON.loc[
-                    (st.session_state.positionsON["Symbol"] == row["Symbol"]) & (st.session_state.positionsON["Exit Time"].isnull()),
-                    "Exit Time"
-                ] = datetime.now()
             
             st.session_state.positions[row["Symbol"]] = position_taken
 
         # Display active positions table
         st.subheader("📊 Positions Tracking")
-        st.dataframe(st.session_state.positionsON)
+        if not st.session_state.positionsON.empty:
+            for index, row in st.session_state.positionsON.iterrows():
+                if row["Symbol"] in data:
+                    current_price = float(data[row["Symbol"]]["last_price"])
+                    entry_price = row["Price"]
+                    target_price = row["Target Price"]
+                    stop_loss = row["Stop Loss Price"]
+
+                    # Determine if should hold or sell
+                    if current_price >= target_price:
+                        status = "✅ Target Hit"
+                        suggestion = "Sell"
+                    elif current_price <= stop_loss:
+                        status = "🚨 Stop Loss Hit"
+                        suggestion = "Sell"
+                    else:
+                        status = "📈 Holding"
+                        suggestion = "Hold"
+
+                    st.session_state.positionsON.at[index, "Status"] = status
+                    st.session_state.positionsON.at[index, "Suggestion"] = suggestion
+
+            st.dataframe(st.session_state.positionsON)
 
     else:
         st.info("No potential explosive cryptos detected right now.")
