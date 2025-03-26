@@ -80,3 +80,6 @@ if data:
         st.info("No potential explosive cryptos detected right now.")
 else:
     st.error("Failed to retrieve data. Please check API access.")
+
+time.sleep(30)
+st.rerun()
