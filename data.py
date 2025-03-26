@@ -12,8 +12,11 @@ def fetch_stock_data():
     headers = {"Authorization": "7d660bba-f2c8-4a6f-b7b0-a5c99b7e5380"}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
-        return response.json()["data"]
+        data = response.json().get("data", [])
+        st.write("Fetched Data:", data)  # Debugging output
+        return data
     else:
+        st.error("Failed to fetch stock data from Upstox API.")
         return []
 
 def calculate_indicators(df):
@@ -28,9 +31,9 @@ def analyze_stock(df):
     latest = df.iloc[-1]
     trade_decision = "❓ Neutral"
     
-    if latest["Close"] > latest["SMA_50"] > latest["SMA_200"] and latest["RSI"] < 70 and latest["MACD"] > latest["Signal"]:
+    if latest["Close"] > latest["SMA_50"] and latest["RSI"] < 75 and latest["MACD"] > latest["Signal"]:
         trade_decision = "✅ Strong Buy"
-    elif latest["RSI"] > 70:
+    elif latest["RSI"] > 75:
         trade_decision = "⚠ Overbought - Wait"
     elif latest["Close"] < latest["SMA_50"]:
         trade_decision = "❌ Weak - Avoid"
@@ -49,8 +52,11 @@ breakout_stocks = []
 
 stock_data = fetch_stock_data()
 for stock in stock_data:
-    df = pd.DataFrame(stock["ohlc"])
-    if not df.empty:
+    if "ohlc" in stock:
+        df = pd.DataFrame(stock["ohlc"])
+        if df.empty:
+            st.write(f"No data for {stock['symbol']}")  # Debugging output
+            continue
         df = calculate_indicators(df)
         stock_analysis = analyze_stock(df)
         stock_analysis["Symbol"] = stock["symbol"]
@@ -62,5 +68,5 @@ if breakout_stocks:
 else:
     st.info("No breakout stocks detected right now.")
 
-time.sleep(60)
+time.sleep(10)
 st.rerun()
