@@ -72,7 +72,7 @@ if "positions" not in st.session_state:
     st.session_state.positions = {}
 
 if "positionsON" not in st.session_state:
-    st.session_state.positionsON = pd.DataFrame(columns=["Symbol", "Entry Time", "Exit Time"])
+    st.session_state.positionsON = pd.DataFrame(columns=["Symbol", "Entry Time", "Exit Time", "Target Price", "Stop Loss Price"])
 
 if data:
     analyzed_data = analyze_market(data)
@@ -84,18 +84,27 @@ if data:
         st.subheader("📈 Cryptos Likely to Explode Soon")
         
         for index, row in df.iterrows():
-            col1, col2, col3, col4 = st.columns([2, 2, 3, 1])
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 2, 2, 1])
             col1.write(row["Symbol"])
             col2.write(f"₹{row['Price']}")
-            col3.write(row["Trade Decision"])
+            col3.write(f"🎯 ₹{row['Target Price']}")
+            col4.write(f"🛑 ₹{row['Stop Loss Price']}")
+            col5.write(row["Trade Decision"])
             
             # Position checkbox
-            position_taken = col4.checkbox("📌 Took Position", st.session_state.positions.get(row["Symbol"], False), key=row["Symbol"])
+            position_taken = col6.checkbox("📌 Took Position", st.session_state.positions.get(row["Symbol"], False), key=row["Symbol"])
             
             # Track entry and exit
             if position_taken and not st.session_state.positions.get(row["Symbol"], False):
-                new_entry = pd.DataFrame([{"Symbol": row["Symbol"], "Entry Time": datetime.now(), "Exit Time": None}])
+                new_entry = pd.DataFrame([{
+                    "Symbol": row["Symbol"], 
+                    "Entry Time": datetime.now(), 
+                    "Exit Time": None,
+                    "Target Price": row["Target Price"],
+                    "Stop Loss Price": row["Stop Loss Price"]
+                }])
                 st.session_state.positionsON = pd.concat([st.session_state.positionsON, new_entry], ignore_index=True)
+            
             elif not position_taken and st.session_state.positions.get(row["Symbol"], False):
                 st.session_state.positionsON.loc[
                     (st.session_state.positionsON["Symbol"] == row["Symbol"]) & (st.session_state.positionsON["Exit Time"].isnull()),
