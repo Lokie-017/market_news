@@ -9,7 +9,7 @@ st.title("📈 Stock Breakout Predictor")
 # Fetch stock data from Upstox API
 def fetch_stock_data():
     url = "https://api.upstox.com/v2/market/quotes/NSE_EQ"
-    headers = {"Authorization": "7d660bba-f2c8-4a6f-b7b0-a5c99b7e5380"}
+    headers = {"Authorization": "Bearer 7d660bba-f2c8-4a6f-b7b0-a5c99b7e5380"}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         data = response.json().get("data", [])
