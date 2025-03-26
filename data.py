@@ -48,8 +48,7 @@ def analyze_market(data):
                     "Volume": volume, "Volatility (%)": volatility,
                     "Target Price": calculate_target_price(price, change, volume),
                     "Stop Loss Price": calculate_stop_loss(price, change),
-                    "Trade Decision": trade_decision,
-                    "Selected": False  # Checkbox state
+                    "Trade Decision": trade_decision
                 })
         except (ValueError, KeyError):
             continue
@@ -61,25 +60,25 @@ if data:
     analyzed_data = analyze_market(data)
     if analyzed_data:
         df = pd.DataFrame(analyzed_data)
-        df["Selected"] = [st.checkbox("", key=i) for i in range(len(df))]
-        df_selected = df[df["Selected"]]
         
         st.subheader("📈 Cryptos Likely to Explode Soon")
         st.dataframe(df)
         
         search_query = st.text_input("🔍 Search Crypto Symbol:")
+        df_selected = pd.DataFrame()
+        
         if search_query:
             searched_df = df[df["Symbol"].str.contains(search_query, case=False, na=False)]
             if not searched_df.empty:
-                df_selected = pd.concat([df_selected, searched_df]).drop_duplicates().reset_index(drop=True)
-            
+                df_selected = searched_df.drop_duplicates().reset_index(drop=True)
+        
         if not df_selected.empty:
             df_selected["Suggestion"] = df_selected["24h Change (%)"].apply(lambda x: "Hold" if x > 10 else "Sell")
-            st.subheader("✅ Selected Cryptos")
+            st.subheader(f"✅ Selected Cryptos ({len(df_selected)})")
             st.dataframe(df_selected)
     else:
         st.info("No potential explosive cryptos detected right now.")
 else:
     st.error("Failed to retrieve data. Please check API access.")
 
-st.experimental_rerun()  # Auto-refresh
+st.rerun()  # Auto-refresh
