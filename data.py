@@ -18,6 +18,7 @@ def fetch_stock_data():
         if not data:
             st.warning("No data received from Upstox API.")
         else:
+            print(data)
             return data
     else:
         st.error(f"Failed to fetch stock data. Status Code: {response.status_code}")
