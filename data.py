@@ -26,11 +26,11 @@ def calculate_volatility(change, volume):
 
 def get_trade_decision(volatility):
     if volatility > 20:
-        return "🔥 High Volatility - Enter with Caution", "Small"
+        return "🔥 High Volatility - Enter with Caution"
     elif volatility > 10:
-        return "✅ Strong Buy", "Medium"
+        return "✅ Strong Buy"
     else:
-        return "⚠ Moderate Buy", "Large"
+        return "⚠ Moderate Buy"
 
 def analyze_market(data):
     potential_explosions = []
@@ -42,13 +42,13 @@ def analyze_market(data):
             
             if change > 5 and volume > 500000:
                 volatility = calculate_volatility(change, volume)
-                trade_decision, position = get_trade_decision(volatility)
+                trade_decision = get_trade_decision(volatility)
                 potential_explosions.append({
                     "Symbol": coin['market'], "Price": price, "24h Change (%)": change,
                     "Volume": volume, "Volatility (%)": volatility,
                     "Target Price": calculate_target_price(price, change, volume),
                     "Stop Loss Price": calculate_stop_loss(price, change),
-                    "Trade Decision": trade_decision, "Position": position,
+                    "Trade Decision": trade_decision,
                     "Selected": False  # Checkbox state
                 })
         except (ValueError, KeyError):
@@ -67,7 +67,14 @@ if data:
         st.subheader("📈 Cryptos Likely to Explode Soon")
         st.dataframe(df)
         
+        search_query = st.text_input("🔍 Search Crypto Symbol:")
+        if search_query:
+            searched_df = df[df["Symbol"].str.contains(search_query, case=False, na=False)]
+            if not searched_df.empty:
+                df_selected = pd.concat([df_selected, searched_df]).drop_duplicates().reset_index(drop=True)
+            
         if not df_selected.empty:
+            df_selected["Suggestion"] = df_selected["24h Change (%)"].apply(lambda x: "Hold" if x > 10 else "Sell")
             st.subheader("✅ Selected Cryptos")
             st.dataframe(df_selected)
     else:
