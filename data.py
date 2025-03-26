@@ -66,25 +66,22 @@ if data:
     
     if not df.empty:
         st.subheader("📈 Cryptos Likely to Explode Soon")
-
-        # Add Position Column with Checkboxes
-        df["Took Position"] = df["Symbol"].apply(lambda x: st.checkbox("📌", st.session_state.positions.get(x, False), key=x))
-
         st.dataframe(df)
 
         # Handle Position Tracking
-        for index, row in df.iterrows():
-            symbol = row["Symbol"]
-            position_taken = row["Took Position"]
+        st.subheader("📌 Select Positions")
+        for symbol in df["Symbol"]:
+            position_taken = st.checkbox(f"📌 {symbol}", st.session_state.positions.get(symbol, False), key=symbol)
 
             if position_taken and not st.session_state.positions.get(symbol, False):
+                coin_data = df[df["Symbol"] == symbol].iloc[0]
                 new_entry = pd.DataFrame([{
                     "Symbol": symbol, 
                     "Entry Time": datetime.now(), 
-                    "Price": row["Price"],
-                    "Volume": row["Volume"],
-                    "Target Price": row["Target Price"],
-                    "Stop Loss Price": row["Stop Loss Price"],
+                    "Price": coin_data["Price"],
+                    "Volume": coin_data["Volume"],
+                    "Target Price": coin_data["Target Price"],
+                    "Stop Loss Price": coin_data["Stop Loss Price"],
                     "Status": "Holding",
                     "Suggestion": "Hold"
                 }])
