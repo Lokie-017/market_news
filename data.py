@@ -1,96 +1,75 @@
 import streamlit as st
-import requests
+import yfinance as yf
 import pandas as pd
 import time
-from datetime import datetime
 
-st.set_page_config(page_title="Crypto Explosion Predictor", layout="wide")
-st.title("🚀 Crypto Explosion Predictor")
+st.set_page_config(page_title="Stock Breakout Predictor", layout="wide")
+st.title("📈 Stock Breakout Predictor")
 
-@st.cache_data(ttl=30)
-def fetch_coindcx_data():
-    url = "https://api.coindcx.com/exchange/ticker"
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        return {coin['market']: coin for coin in data if coin['market'].endswith('INR')}
-    return {}
+@st.cache_data(ttl=300)
+def get_nse_stocks():
+    try:
+        nse_symbols = pd.read_html("https://www.nseindia.com/market-data/live-equity-market")[0]["Symbol"].tolist()
+        return [symbol + ".NS" for symbol in nse_symbols if isinstance(symbol, str)]
+    except:
+        return []
 
-def calculate_target_price(price, change, volume):
-    fib_multiplier = 1.618
-    volatility_factor = 1 + (volume / 10000000)
-    return round(price * (1 + ((change / 100) * fib_multiplier * volatility_factor)), 2)
+timeframe = "1mo"
+nse_stocks = get_nse_stocks()
 
-def calculate_stop_loss(price, change):
-    stop_loss_factor = 0.95 if change > 8 else 0.90
-    return round(price * stop_loss_factor, 2)
+@st.cache_data(ttl=300)
+def fetch_stock_data(symbol, period):
+    try:
+        stock = yf.Ticker(symbol)
+        df = stock.history(period=period)
+        return df if not df.empty else None
+    except Exception as e:
+        return None
 
-def analyze_market(data):
-    potential_explosions = []
-    for symbol, coin in data.items():
-        try:
-            price = float(coin.get('last_price', 0))
-            volume = float(coin.get('volume', 0))
-            change = float(coin.get('change_24_hour', 0))
+def calculate_indicators(df):
+    df["SMA_50"] = df["Close"].rolling(window=50).mean()
+    df["SMA_200"] = df["Close"].rolling(window=200).mean()
+    df["RSI"] = 100 - (100 / (1 + df["Close"].pct_change().rolling(14).mean() / df["Close"].pct_change().rolling(14).std()))
+    df["MACD"] = df["Close"].ewm(span=12, adjust=False).mean() - df["Close"].ewm(span=26, adjust=False).mean()
+    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+    return df
 
-            if change > 5 and volume > 500000:
-                potential_explosions.append({
-                    "Symbol": symbol, "Price": price, "24h Change (%)": change,
-                    "Volume": volume, "Target Price": calculate_target_price(price, change, volume),
-                    "Stop Loss Price": calculate_stop_loss(price, change), 
-                    "Trade Decision": "✅ Strong Buy" if change > 10 else "⚠ Moderate Buy"
-                })
-        except ValueError:
-            continue
-    return pd.DataFrame(potential_explosions) if potential_explosions else pd.DataFrame()
+def analyze_stock(df):
+    latest = df.iloc[-1]
+    trade_decision = "❓ Neutral"
+    
+    if latest["Close"] > latest["SMA_50"] > latest["SMA_200"] and latest["RSI"] < 70 and latest["MACD"] > latest["Signal"]:
+        trade_decision = "✅ Strong Buy"
+    elif latest["RSI"] > 70:
+        trade_decision = "⚠ Overbought - Wait"
+    elif latest["Close"] < latest["SMA_50"]:
+        trade_decision = "❌ Weak - Avoid"
+    
+    return {
+        "Current Price": round(latest["Close"], 2),
+        "50-Day SMA": round(latest["SMA_50"], 2),
+        "200-Day SMA": round(latest["SMA_200"], 2),
+        "RSI": round(latest["RSI"], 2),
+        "MACD": round(latest["MACD"], 2),
+        "Trade Decision": trade_decision
+    }
 
-data = fetch_coindcx_data()
-if "positions" not in st.session_state:
-    st.session_state.positions = {}
-if "positionsON" not in st.session_state:
-    st.session_state.positionsON = pd.DataFrame(columns=["Symbol", "Entry Time", "Price", "Volume", "Target Price", "Stop Loss Price", "Status", "Suggestion"])
+st.subheader("🚀 Potential Breakout Stocks")
+breakout_stocks = []
 
-if data:
-    df = analyze_market(data)
-    if not df.empty:
-        st.subheader("📈 Cryptos Likely to Explode Soon")
-        col1, col2 = st.columns([3, 1])  # Creating layout
-        
-        with col1:
-            st.dataframe(df)
-        
-        with col2:
-            st.subheader("📌 Track Positions")
-            for symbol in df["Symbol"]:
-                position_taken = st.checkbox(f"{symbol}", st.session_state.positions.get(symbol, False), key=symbol)
-                if position_taken and not st.session_state.positions.get(symbol, False):
-                    coin_data = df[df["Symbol"] == symbol].iloc[0]
-                    new_entry = pd.DataFrame([{
-                        "Symbol": symbol, "Entry Time": datetime.now(), "Price": coin_data["Price"],
-                        "Volume": coin_data["Volume"], "Target Price": coin_data["Target Price"],
-                        "Stop Loss Price": coin_data["Stop Loss Price"], "Status": "Holding", "Suggestion": "Hold"
-                    }])
-                    st.session_state.positionsON = pd.concat([st.session_state.positionsON, new_entry], ignore_index=True)
-                st.session_state.positions[symbol] = position_taken
-        
-        st.subheader("📊 Positions Tracking")
-        if not st.session_state.positionsON.empty:
-            for index, row in st.session_state.positionsON.iterrows():
-                if row["Symbol"] in data:
-                    current_price = float(data[row["Symbol"]]["last_price"])
-                    if current_price >= row["Target Price"]:
-                        status, suggestion = "✅ Target Hit", "Sell"
-                    elif current_price <= row["Stop Loss Price"]:
-                        status, suggestion = "🚨 Stop Loss Hit", "Sell"
-                    else:
-                        status, suggestion = "📈 Holding", "Hold"
-                    st.session_state.positionsON.at[index, "Status"] = status
-                    st.session_state.positionsON.at[index, "Suggestion"] = suggestion
-            st.dataframe(st.session_state.positionsON)
-    else:
-        st.info("No potential explosive cryptos detected right now.")
+for stock_symbol in nse_stocks:
+    df = fetch_stock_data(stock_symbol, timeframe)
+    if df is not None:
+        df = calculate_indicators(df)
+        stock_analysis = analyze_stock(df)
+        stock_analysis["Symbol"] = stock_symbol
+        if stock_analysis["Trade Decision"] == "✅ Strong Buy":
+            breakout_stocks.append(stock_analysis)
+
+if breakout_stocks:
+    st.dataframe(pd.DataFrame(breakout_stocks))
 else:
-    st.error("Failed to retrieve data. Please check API access.")
+    st.info("No breakout stocks detected right now.")
 
-time.sleep(30)
+time.sleep(60)
 st.rerun()
