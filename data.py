@@ -67,5 +67,5 @@ if data:
 else:
     st.error("Failed to retrieve data. Please check API access.")
 
-st.experimental_rerun()  # Auto-refresh
+st.rerun()  # Auto-refresh
 
