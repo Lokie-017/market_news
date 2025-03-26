@@ -1,30 +1,20 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import time
+import requests
 
 st.set_page_config(page_title="Stock Breakout Predictor", layout="wide")
 st.title("📈 Stock Breakout Predictor")
 
-@st.cache_data(ttl=300)
-def get_nse_stocks():
-    try:
-        nse_symbols = pd.read_html("https://www.nseindia.com/market-data/live-equity-market")[0]["Symbol"].tolist()
-        return [symbol + ".NS" for symbol in nse_symbols if isinstance(symbol, str)]
-    except:
+# Fetch stock data from Upstox API
+def fetch_stock_data():
+    url = "https://api.upstox.com/v2/market/quotes/NSE_EQ"
+    headers = {"Authorization": "7d660bba-f2c8-4a6f-b7b0-a5c99b7e5380"}
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()["data"]
+    else:
         return []
-
-timeframe = "1mo"
-nse_stocks = get_nse_stocks()
-
-@st.cache_data(ttl=300)
-def fetch_stock_data(symbol, period):
-    try:
-        stock = yf.Ticker(symbol)
-        df = stock.history(period=period)
-        return df if not df.empty else None
-    except Exception as e:
-        return None
 
 def calculate_indicators(df):
     df["SMA_50"] = df["Close"].rolling(window=50).mean()
@@ -57,12 +47,13 @@ def analyze_stock(df):
 st.subheader("🚀 Potential Breakout Stocks")
 breakout_stocks = []
 
-for stock_symbol in nse_stocks:
-    df = fetch_stock_data(stock_symbol, timeframe)
-    if df is not None:
+stock_data = fetch_stock_data()
+for stock in stock_data:
+    df = pd.DataFrame(stock["ohlc"])
+    if not df.empty:
         df = calculate_indicators(df)
         stock_analysis = analyze_stock(df)
-        stock_analysis["Symbol"] = stock_symbol
+        stock_analysis["Symbol"] = stock["symbol"]
         if stock_analysis["Trade Decision"] == "✅ Strong Buy":
             breakout_stocks.append(stock_analysis)
 
