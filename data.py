@@ -66,21 +66,20 @@ if data:
     
     if not df.empty:
         st.subheader("📈 Cryptos Likely to Explode Soon")
-        
+
+        # Add Position Column with Checkboxes
+        df["Took Position"] = df["Symbol"].apply(lambda x: st.checkbox("📌", st.session_state.positions.get(x, False), key=x))
+
+        st.dataframe(df)
+
+        # Handle Position Tracking
         for index, row in df.iterrows():
-            col1, col2, col3, col4, col5, col6, col7 = st.columns([2, 2, 2, 2, 2, 2, 1])
-            col1.write(row["Symbol"])
-            col2.write(f"₹{row['Price']}")
-            col3.write(f"🔊 {row['Volume']}")
-            col4.write(f"🎯 ₹{row['Target Price']}")
-            col5.write(f"🛑 ₹{row['Stop Loss Price']}")
-            col6.write(row["Trade Decision"])
-            
-            position_taken = col7.checkbox("📌 Took Position", st.session_state.positions.get(row["Symbol"], False), key=row["Symbol"])
-            
-            if position_taken and not st.session_state.positions.get(row["Symbol"], False):
+            symbol = row["Symbol"]
+            position_taken = row["Took Position"]
+
+            if position_taken and not st.session_state.positions.get(symbol, False):
                 new_entry = pd.DataFrame([{
-                    "Symbol": row["Symbol"], 
+                    "Symbol": symbol, 
                     "Entry Time": datetime.now(), 
                     "Price": row["Price"],
                     "Volume": row["Volume"],
@@ -91,9 +90,9 @@ if data:
                 }])
                 st.session_state.positionsON = pd.concat([st.session_state.positionsON, new_entry], ignore_index=True)
             
-            st.session_state.positions[row["Symbol"]] = position_taken
+            st.session_state.positions[symbol] = position_taken
 
-        # Display active positions table
+        # Display Active Positions
         st.subheader("📊 Positions Tracking")
         if not st.session_state.positionsON.empty:
             for index, row in st.session_state.positionsON.iterrows():
