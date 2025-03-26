@@ -80,5 +80,3 @@ if data:
         st.info("No potential explosive cryptos detected right now.")
 else:
     st.error("Failed to retrieve data. Please check API access.")
-
-st.rerun()  # Auto-refresh
