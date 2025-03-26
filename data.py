@@ -1,53 +1,118 @@
 import streamlit as st
 import requests
 import pandas as pd
-import yfinance as yf
 import time
+from datetime import datetime
 
-st.set_page_config(page_title="Indian Stock Explosion Predictor", layout="wide")
-st.title("🚀 Indian Stock Explosion Predictor")
+st.set_page_config(page_title="Crypto Explosion Predictor", layout="wide")
+st.title("🚀 Crypto Explosion Predictor")
 
-@st.cache_data(ttl=300)  # Cache data for 5 minutes to reduce API calls
-def fetch_nse_data(ticker):
-    stock = yf.Ticker(ticker)
-    hist = stock.history(period="1mo")
-    time.sleep(1)  # Pause to avoid rate limiting
-    return hist
+@st.cache_data(ttl=30)  # Cache data for 30 seconds to reduce API calls
+def fetch_coindcx_data():
+    url = "https://api.coindcx.com/exchange/ticker"
+    response = requests.get(url)
 
-@st.cache_data(ttl=86400)  # Cache for 24 hours
-def get_all_nse_stocks():
-    url = "https://archives.nseindia.com/content/equities/EQUITY_L.csv"
-    df = pd.read_csv(url)
-    return df["SYMBOL"].tolist()
+    if response.status_code == 200:
+        data = response.json()
+        return [coin for coin in data if coin['market'].endswith('INR')]  # Filter INR pairs
+    else:
+        return []
 
-nse_stocks = [ticker + ".NS" for ticker in get_all_nse_stocks()]
+def calculate_target_price(price, change, volume):
+    fib_multiplier = 1.618
+    volatility_factor = 1 + (volume / 10000000)
+    return round(price * (1 + ((change / 100) * fib_multiplier * volatility_factor)), 2)
 
-def analyze_market():
-    results = []
-    for ticker in nse_stocks[:50]:  # Limit requests to avoid rate limiting
-        stock_data = fetch_nse_data(ticker)
-        
-        if stock_data.empty:
+def calculate_stop_loss(price, change):
+    stop_loss_factor = 0.95 if change > 8 else 0.90
+    return round(price * stop_loss_factor, 2)
+
+def calculate_volatility(change, volume):
+    # Volatility percentage calculation (Relative Change * Volume Impact)
+    volatility = abs(change) * (1 + (volume / 10000000))  
+    return round(volatility, 2)
+
+def analyze_market(data):
+    potential_explosions = []
+    for coin in data:
+        try:
+            symbol = coin.get('market', 'N/A')
+            price = float(coin.get('last_price', 0))
+            volume = float(coin.get('volume', 0))
+            change = float(coin.get('change_24_hour', 0))
+
+            if change > 5 and volume > 500000:
+                target_price = calculate_target_price(price, change, volume)
+                stop_loss_price = calculate_stop_loss(price, change)
+                volatility = calculate_volatility(change, volume)
+
+                # Decision-making using volatility
+                if volatility > 20:
+                    trade_decision = "🔥 High Volatility - Enter with Caution"
+                elif volatility > 10:
+                    trade_decision = "✅ Strong Buy"
+                else:
+                    trade_decision = "⚠ Moderate Buy"
+
+                potential_explosions.append({
+                    "Symbol": symbol, "Price": price, "24h Change (%)": change,
+                    "Volume": volume, "Volatility (%)": volatility,
+                    "Target Price": target_price, "Stop Loss Price": stop_loss_price, 
+                    "Trade Decision": trade_decision
+                })
+        except ValueError:
             continue
-        
-        latest_close = stock_data["Close"].iloc[-1]
-        volume = stock_data["Volume"].iloc[-1]
-        change = ((latest_close - stock_data["Close"].iloc[-2]) / stock_data["Close"].iloc[-2]) * 100
-        
-        if change > 5 and volume > 500000:
-            results.append({
-                "Stock": ticker, "Current Price": latest_close, "24h Change (%)": round(change, 2),
-                "Volume": volume
-            })
-    return results
+    return potential_explosions
 
-data = analyze_market()
+# Fetch data
+data = fetch_coindcx_data()
+
+# Initialize session state for tracking positions
+if "positions" not in st.session_state:
+    st.session_state.positions = {}
+
+if "positionsON" not in st.session_state:
+    st.session_state.positionsON = pd.DataFrame(columns=["Symbol", "Entry Time", "Exit Time"])
+
 if data:
-    df = pd.DataFrame(data)
-    st.subheader("📈 Stocks Likely to Explode Soon")
-    st.dataframe(df)
-else:
-    st.info("No potential explosive stocks detected right now.")
+    analyzed_data = analyze_market(data)
+    
+    if analyzed_data:
+        df = pd.DataFrame(analyzed_data)
 
+        # Add checkbox column for tracking positions
+        st.subheader("📈 Cryptos Likely to Explode Soon")
+        
+        for index, row in df.iterrows():
+            col1, col2, col3, col4 = st.columns([2, 2, 3, 1])
+            col1.write(row["Symbol"])
+            col2.write(f"₹{row['Price']}")
+            col3.write(row["Trade Decision"])
+            
+            # Position checkbox
+            position_taken = col4.checkbox("📌 Took Position", st.session_state.positions.get(row["Symbol"], False), key=row["Symbol"])
+            
+            # Track entry and exit
+            if position_taken and not st.session_state.positions.get(row["Symbol"], False):
+                new_entry = pd.DataFrame([{"Symbol": row["Symbol"], "Entry Time": datetime.now(), "Exit Time": None}])
+                st.session_state.positionsON = pd.concat([st.session_state.positionsON, new_entry], ignore_index=True)
+            elif not position_taken and st.session_state.positions.get(row["Symbol"], False):
+                st.session_state.positionsON.loc[
+                    (st.session_state.positionsON["Symbol"] == row["Symbol"]) & (st.session_state.positionsON["Exit Time"].isnull()),
+                    "Exit Time"
+                ] = datetime.now()
+            
+            st.session_state.positions[row["Symbol"]] = position_taken
+
+        # Display active positions table
+        st.subheader("📊 Positions Tracking")
+        st.dataframe(st.session_state.positionsON)
+
+    else:
+        st.info("No potential explosive cryptos detected right now.")
+else:
+    st.error("Failed to retrieve data. Please check API access.")
+
+# Auto-refresh every 30 seconds
 time.sleep(30)
 st.rerun()
