@@ -1,84 +1,93 @@
 import streamlit as st
+import requests
 import pandas as pd
 import time
-import requests
-import os
 
-st.set_page_config(page_title="Stock Breakout Predictor", layout="wide")
-st.title("📈 Stock Breakout Predictor")
+st.set_page_config(page_title="Crypto Explosion Predictor", layout="wide")
+st.title("🚀 Crypto Explosion Predictor with AI Insights")
 
-# Fetch stock data from Upstox API
-def fetch_stock_data():
-    url = "https://api.upstox.com/v2/market/quotes/NSE_EQ"
-    headers = {"Authorization": f"Bearer 7d660bba-f2c8-4a6f-b7b0-a5c99b7e5380"}
-    
-    response = requests.get(url, headers=headers)
+@st.cache_data(ttl=30)  # Cache data for 30 seconds to reduce API calls
+def fetch_coindcx_data():
+    url = "https://api.coindcx.com/exchange/ticker"
+    response = requests.get(url)
+
     if response.status_code == 200:
-        data = response.json().get("data", [])
-        if not data:
-            st.warning("No data received from Upstox API.")
-        else:
-            print(data)
-            return data
+        data = response.json()
+        return [coin for coin in data if coin['market'].endswith('INR')]  # Filter INR pairs
     else:
-        st.error(f"Failed to fetch stock data. Status Code: {response.status_code}")
         return []
 
-# Calculate technical indicators
-def calculate_indicators(df):
-    df["SMA_50"] = df["Close"].rolling(window=50, min_periods=1).mean()
-    df["SMA_200"] = df["Close"].rolling(window=200, min_periods=1).mean()
-    delta = df["Close"].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(14, min_periods=1).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(14, min_periods=1).mean()
-    rs = gain / (loss + 1e-10)
-    df["RSI"] = 100 - (100 / (1 + rs))
-    df["MACD"] = df["Close"].ewm(span=12, adjust=False).mean() - df["Close"].ewm(span=26, adjust=False).mean()
-    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
-    return df
-
-# Analyze stock based on indicators
-def analyze_stock(df):
-    latest = df.iloc[-1]
-    trade_decision = "❓ Neutral"
+# Placeholder function to integrate InciteAI insights
+def fetch_inciteai_predictions(symbol):
+    # Replace with actual InciteAI API call
+    ai_url = f"https://api.inciteai.com/predict?symbol={symbol}"
+    response = requests.get(ai_url)
     
-    if latest["Close"] > latest["SMA_50"] and latest["RSI"] < 75 and latest["MACD"] > latest["Signal"]:
-        trade_decision = "✅ Strong Buy"
-    elif latest["RSI"] > 75:
-        trade_decision = "⚠ Overbought - Wait"
-    elif latest["Close"] < latest["SMA_50"]:
-        trade_decision = "❌ Weak - Avoid"
-    
-    return {
-        "Symbol": df.iloc[-1].name,
-        "Current Price": round(latest["Close"], 2),
-        "50-Day SMA": round(latest["SMA_50"], 2),
-        "200-Day SMA": round(latest["SMA_200"], 2),
-        "RSI": round(latest["RSI"], 2),
-        "MACD": round(latest["MACD"], 2),
-        "Trade Decision": trade_decision
-    }
+    if response.status_code == 200:
+        ai_data = response.json()
+        return ai_data.get("prediction", "Neutral"), ai_data.get("confidence", 50)
+    else:
+        return "Neutral", 50
 
-st.subheader("🚀 Potential Breakout Stocks")
-breakout_stocks = []
+def calculate_target_price(price, change, volume):
+    fib_multiplier = 1.618
+    volatility_factor = 1 + (volume / 10000000)
+    return round(price * (1 + ((change / 100) * fib_multiplier * volatility_factor)), 2)
 
-stock_data = fetch_stock_data()
-for stock in stock_data:
-    if "ohlc" in stock and stock["ohlc"]:
-        df = pd.DataFrame(stock["ohlc"])
-        df = df.rename(columns={"c": "Close"})  # Ensure column mapping
-        if df.empty:
-            st.warning(f"No data available for {stock['symbol']}")
+def calculate_stop_loss(price, change):
+    stop_loss_factor = 0.95 if change > 8 else 0.90
+    return round(price * stop_loss_factor, 2)
+
+def calculate_volatility(change, volume):
+    volatility = abs(change) * (1 + (volume / 10000000))  
+    return round(volatility, 2)
+
+def analyze_market(data):
+    potential_explosions = []
+    for coin in data:
+        try:
+            symbol = coin.get('market', 'N/A')
+            price = float(coin.get('last_price', 0))
+            volume = float(coin.get('volume', 0))
+            change = float(coin.get('change_24_hour', 0))
+
+            if change > 5 and volume > 500000:
+                target_price = calculate_target_price(price, change, volume)
+                stop_loss_price = calculate_stop_loss(price, change)
+                volatility = calculate_volatility(change, volume)
+                ai_prediction, ai_confidence = fetch_inciteai_predictions(symbol)
+
+                if volatility > 20:
+                    trade_decision = "🔥 High Volatility - Enter with Caution"
+                elif volatility > 10:
+                    trade_decision = "✅ Strong Buy"
+                else:
+                    trade_decision = "⚠ Moderate Buy"
+
+                potential_explosions.append({
+                    "Symbol": symbol, "Price": price, "24h Change (%)": change,
+                    "Volume": volume, "Volatility (%)": volatility,
+                    "Target Price": target_price, "Stop Loss Price": stop_loss_price, 
+                    "Trade Decision": trade_decision, "AI Prediction": ai_prediction,
+                    "AI Confidence (%)": ai_confidence
+                })
+        except ValueError:
             continue
-        df = calculate_indicators(df)
-        stock_analysis = analyze_stock(df)
-        if stock_analysis["Trade Decision"] == "✅ Strong Buy":
-            breakout_stocks.append(stock_analysis)
+    return potential_explosions
 
-if breakout_stocks:
-    st.table(pd.DataFrame(breakout_stocks))  # Use table for better readability
+# Fetch and display data
+data = fetch_coindcx_data()
+if data:
+    analyzed_data = analyze_market(data)
+    if analyzed_data:
+        df = pd.DataFrame(analyzed_data)
+        st.subheader("📈 Cryptos Likely to Explode Soon (AI Enhanced)")
+        st.dataframe(df)
+    else:
+        st.info("No potential explosive cryptos detected right now.")
 else:
-    st.info("No breakout stocks detected right now.")
+    st.error("Failed to retrieve data. Please check API access.")
 
-time.sleep(10)
+# Auto-refresh every 30 seconds
+time.sleep(30)
 st.rerun()
