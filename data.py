@@ -48,7 +48,8 @@ def analyze_market(data):
                     "Volume": volume, "Volatility (%)": volatility,
                     "Target Price": calculate_target_price(price, change, volume),
                     "Stop Loss Price": calculate_stop_loss(price, change),
-                    "Trade Decision": trade_decision, "Position": position
+                    "Trade Decision": trade_decision, "Position": position,
+                    "Selected": False  # Checkbox state
                 })
         except (ValueError, KeyError):
             continue
@@ -60,12 +61,18 @@ if data:
     analyzed_data = analyze_market(data)
     if analyzed_data:
         df = pd.DataFrame(analyzed_data)
+        df["Selected"] = [st.checkbox("", key=i) for i in range(len(df))]
+        df_selected = df[df["Selected"]]
+        
         st.subheader("📈 Cryptos Likely to Explode Soon")
         st.dataframe(df)
+        
+        if not df_selected.empty:
+            st.subheader("✅ Selected Cryptos")
+            st.dataframe(df_selected)
     else:
         st.info("No potential explosive cryptos detected right now.")
 else:
     st.error("Failed to retrieve data. Please check API access.")
 
-st.rerun()  # Auto-refresh
-
+st.experimental_rerun()  # Auto-refresh
